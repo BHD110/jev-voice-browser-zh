@@ -10,7 +10,7 @@ import { createDecider } from "./jev.js";
 import { MODEL, QUESTIONS, T } from "./constants.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const MAX_SESSIONS = 3;
+const MAX_SESSIONS = Math.max(1, Math.min(3, Number(process.env.VOICE_BROWSER_MAX_SESSIONS) || 3));
 const IDLE_MS = 30 * 60 * 1000;
 
 export function parseArgs(argv) {

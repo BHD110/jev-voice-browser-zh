@@ -56,7 +56,7 @@ npx playwright install chromium
 node src/server.js --headless --host 127.0.0.1 --port 5024
 ```
 
-将 `/jev-voice-cn/` 反向代理到 `http://127.0.0.1:5024/`，并转发 WebSocket 的 `Upgrade`、`Connection` 请求头。服务端不配置共享的 `TYPESAFE_API_KEY`。默认最多三个同时使用的浏览器会话，闲置 30 分钟会释放。公网会话阻止浏览器访问本机和内网地址。
+将 `/jev-voice-cn/` 反向代理到 `http://127.0.0.1:5024/`，并转发 WebSocket 的 `Upgrade`、`Connection` 请求头。服务端不配置共享的 `TYPESAFE_API_KEY`。默认最多三个同时使用的浏览器会话，可设置 `VOICE_BROWSER_MAX_SESSIONS=1` 降低小内存服务器的负担；闲置 30 分钟会释放。公网会话阻止浏览器访问本机和内网地址。
 
 可选环境变量见 [.env.example](.env.example)。不要将自己的 Key 写进公开仓库。当前服务端部署的应用源码与 WebP 图片包小于 2 MB；仓库另存放完整时长的演示视频，视频不参与服务端部署。
 
