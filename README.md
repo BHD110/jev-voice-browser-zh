@@ -60,6 +60,8 @@ node src/server.js --headless --host 127.0.0.1 --port 5024
 
 可选环境变量见 [.env.example](.env.example)。不要将自己的 Key 写进公开仓库。当前服务端部署的应用源码与 WebP 图片包小于 2 MB；仓库另存放完整时长的演示视频，视频不参与服务端部署。
 
+本仓库提供 [systemd 用户服务示例](deploy/jev-voice-cn.service)。示例中的目录、端口和并发数按当前演示服务器填写；部署到自己的服务器时改成自己的路径和端口，再执行 `systemctl --user daemon-reload`、`systemctl --user enable --now jev-voice-cn`。
+
 ## 它如何工作
 
 ```text
