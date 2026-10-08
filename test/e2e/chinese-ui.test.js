@@ -24,6 +24,7 @@ test("Chinese speech selection sends recognized text through the live controller
     await page.locator("#apikey").fill("dummy-ui-test-key");
     await page.locator("#keybtn").click();
     await page.waitForFunction(() => !document.querySelector("#micbtn")?.disabled);
+    await page.waitForFunction(() => document.querySelector("#preview")?.naturalWidth > 0);
 
     await page.locator("#micbtn").click();
     assert.equal(await page.evaluate(() => window.__lastSpeech.lang), "zh-CN");
