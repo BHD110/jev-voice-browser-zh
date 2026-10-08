@@ -2,8 +2,7 @@
 
 **说中文或输入中文，让 AI 操作浏览器。** 页面会显示 Jev 的判断、耗时和实际操作的浏览器画面。
 
-<!-- GitHub 视频附件：发布后替换下面一行，完整 41 秒、只压缩不剪辑。 -->
-VIDEO_URL_PLACEHOLDER
+https://github.com/user-attachments/assets/975da89d-2d3b-4df9-915d-28ee8664d9c4
 
 [点击播放完整未剪辑演示](docs/demo-uncut.mp4) · [下载视频原片的轻压缩版](docs/demo-uncut.mp4)
 
