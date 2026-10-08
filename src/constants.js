@@ -12,7 +12,7 @@
  *  - always include a `none` option; never ask Jev to count or generate
  */
 
-export const MODEL = "jev-1.13.0"; // pinned: aliases move on release, thresholds below were tuned on this version
+export const MODEL = process.env.TYPESAFE_MODEL || process.env.TYPESAFE_DEFAULT_MODEL || "jev-1.13.0"; // thresholds below were tuned on jev-1.13.0
 
 export const PRICE_PER_M_INPUT_TOKENS_USD = 0.042; // output tokens are free
 
@@ -33,7 +33,7 @@ export const MAX_CONTEXT_ACTIONS = 3;
 // Timing
 // ---------------------------------------------------------------------------
 export const DEBOUNCE_MS = 200; // wait this long after the last transcript update before asking Jev
-export const MAX_INFLIGHT = 2; // overlapping Jev requests allowed; older ones are cancelled with AbortSignal
+export const MAX_INFLIGHT = 2; // limit live Jev requests; the newest transcript waits for a free slot
 export const SILENCE_COMPLETE_MS = 900; // no new words for this long => treat command as complete
 // Intents that carry free text (a query or text to type) cannot be acted on mid-sentence — "search
 // for alan" is a complete-sounding command but the payload may still be growing. They wait for the

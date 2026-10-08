@@ -20,6 +20,15 @@ test("text candidates: quoted spans win", () => {
   assert.equal(extractTextCandidates('type "good morning" in the comment box')[0], "good morning");
 });
 
+test("Chinese search and typing keep only the requested text", () => {
+  assert.equal(extractTextCandidates("搜索北京天气")[0], "北京天气");
+  assert.equal(extractTextCandidates("帮我查一下明天上海的天气。")[0], "明天上海的天气");
+  assert.equal(extractTextCandidates("在维基百科搜索图灵")[0], "图灵");
+  assert.equal(extractTextCandidates("在搜索框输入你好世界")[0], "你好世界");
+  assert.equal(extractTextCandidates("把你好世界输入到搜索框")[0], "你好世界");
+  assert.equal(extractTextCandidates("输入“早上好”到评论框")[0], "早上好");
+});
+
 test("text candidates: empty / no verbs", () => {
   assert.deepEqual(extractTextCandidates(""), []);
   const c = extractTextCandidates("scroll down");
@@ -55,4 +64,8 @@ test("candidate pick parsing", () => {
   assert.equal(parseCandidatePick("four", 3), null, "out of range");
   assert.equal(parseCandidatePick("go to wikipedia"), null);
   assert.equal(parseCandidatePick(""), null);
+  assert.equal(parseCandidatePick("第二个"), 2);
+  assert.equal(parseCandidatePick("选第3个"), 3);
+  assert.equal(parseCandidatePick("第五个", 3), null, "Chinese number out of range");
+  assert.equal(parseCandidatePick("搜索三个城市"), null);
 });

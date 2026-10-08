@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
 <meta charset="utf-8" />
-<title>voice-browser · Jev control room</title>
+<title>语音浏览器 · 控制台</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
   :root{
@@ -33,6 +33,7 @@
   button.primary{background:var(--accent);color:#111;border-color:var(--accent)}
   button.danger{border-color:var(--red);color:var(--red)}
   input[type=text]{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px}
+  select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px 10px;font-size:13px}
   .bar{display:grid;grid-template-columns:150px 1fr 46px;gap:8px;align-items:center;margin:3px 0;font-size:12.5px}
   .bar .lbl{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .bar .lbl.win{color:var(--text);font-weight:600}
@@ -70,41 +71,58 @@
   @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(239,68,68,.45)}100%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
   .badge{display:inline-block;min-width:20px;text-align:center;background:var(--blue);color:#fff;border-radius:999px;font-weight:700;font-size:12px;padding:1px 6px}
   #pending{color:var(--red);font-weight:600}
+  input[type=password]{flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:9px 12px;font-size:14px}
+  #preview{display:block;width:100%;aspect-ratio:16/10;object-fit:contain;background:#05070b;border:1px solid var(--line);border-radius:8px}
+  @media(max-width:900px){main{display:block;height:auto}.col{margin-bottom:12px}.card.grow{max-height:420px}}
 </style>
 </head>
 <body>
 <header>
-  <h1><span>●</span> voice-browser <span class="small" style="color:var(--muted);font-weight:400">— Jev decides, Playwright acts</span></h1>
-  <span class="pill">model <b id="model">–</b></span>
-  <span class="pill">last <b id="lat">–</b> ms · p50 <b id="p50">–</b> ms</span>
-  <span class="pill">calls <b id="calls">0</b> · actions <b id="actions">0</b></span>
-  <span class="pill">cost <b id="cost">$0.000000</b></span>
-  <span class="pill" title="average: last spoken word → decision / → action finished (incl. page load)">word→decide <b id="c2d">–</b> ms · →done <b id="c2a">–</b> ms</span>
+  <h1><span>●</span> 语音浏览器 <span class="small" style="color:var(--muted);font-weight:400">— 决策模型判断，Playwright 执行</span></h1>
+  <span class="pill">模型 <b id="model">–</b></span>
+  <span class="pill">最近推理 <b id="lat">–</b> ms · 中位数 <b id="p50">–</b> ms</span>
+  <span class="pill">调用 <b id="calls">0</b> 次 · 动作 <b id="actions">0</b> 次</span>
+  <span class="pill">估算费用 <b id="cost">$0.000000</b></span>
+  <span class="pill" title="平均耗时：最后一个字出现至模型判断完成／至浏览器动作完成（含页面加载）">文字→判断 <b id="c2d">–</b> ms · →完成 <b id="c2a">–</b> ms</span>
   <div class="spacer"></div>
-  <span class="pill" id="ws">connecting…</span>
+  <span class="pill" id="ws">正在连接…</span>
 </header>
 
 <main>
   <!-- LEFT: speech -->
   <div class="col">
     <div class="card">
-      <h2><span class="dot" id="micdot"></span> microphone <span class="r small" id="micstate">off</span></h2>
-      <div id="transcript"><span class="interim">Say something like “go to wikipedia”…</span></div>
+      <h2>自己的 Jev API Key</h2>
+      <form id="keyform" class="row">
+        <input id="apikey" type="password" autocomplete="off" spellcheck="false" placeholder="输入后开启独立浏览器" aria-label="Jev API Key" />
+        <button class="primary" type="submit" id="keybtn">开启</button>
+      </form>
+      <div class="small" id="keystate" style="margin-top:7px">Key 只用于当前会话，不会显示在页面状态、日志或保存到浏览器。</div>
+    </div>
+    <div class="card">
+      <h2><span class="dot" id="micdot"></span> 麦克风 <span class="r small" id="micstate">已关闭</span></h2>
+      <div id="transcript"><span class="interim">可说“打开维基百科”，也可以输入中文指令</span></div>
       <div class="row" style="margin-top:10px">
-        <button class="primary" id="micbtn">Start mic</button>
-        <button id="undo">Undo / back</button>
-        <button id="resnap">Re-scan page</button>
+        <button class="primary" id="micbtn">开启麦克风</button>
+        <label for="speechlang" class="small">语音语言</label>
+        <select id="speechlang" aria-label="语音语言">
+          <option value="zh-CN" selected>中文（普通话）</option>
+          <option value="en-US">English</option>
+        </select>
+        <button id="undo">撤销／后退</button>
+        <button id="resnap">重新读取页面</button>
       </div>
       <form id="cmdform" class="row" style="margin-top:10px">
-        <input type="text" id="cmd" placeholder="…or type a command and press Enter (no-mic fallback)" autocomplete="off" />
-        <button type="submit">Run</button>
+        <input type="text" id="cmd" placeholder="输入中文或英文指令，例如：搜索北京天气" autocomplete="off" />
+        <button type="submit">执行</button>
       </form>
       <div id="pending" class="small" style="margin-top:8px"></div>
-      <div class="small" style="margin-top:6px">Mic needs Chrome/Edge (Web Speech API). Partial transcripts stream to the server as you speak; each update = one Jev request (stale ones are cancelled).</div>
+      <div class="small" style="margin-top:6px">在 Chrome 或 Edge 中使用麦克风；语音识别由浏览器提供，可能需要联网。切换语言时请先关闭麦克风。文字指令不需要麦克风。</div>
+      <div class="small" style="margin-top:5px">示例：<code>打开维基百科</code> · <code>搜索北京天气</code> · <code>向下滚动一页</code> · <code>点击了解更多</code>。也可以切换到英文语音。每段语音会逐步送入 Jev 判断。</div>
     </div>
 
     <div class="card grow">
-      <h2>action log</h2>
+      <h2>操作记录</h2>
       <div class="log grow" id="log"></div>
     </div>
   </div>
@@ -112,26 +130,26 @@
   <!-- MIDDLE: decision -->
   <div class="col">
     <div class="card grow">
-      <h2>jev decision <span class="r small" id="decmeta">–</span></h2>
-      <div id="verdict" class="verdict wait">waiting for speech…</div>
-      <div class="small" style="margin-bottom:6px">Policy gates (value vs threshold):</div>
-      <table id="reasons"><thead><tr><th>gate</th><th>value</th><th>threshold</th><th>note</th></tr></thead><tbody></tbody></table>
+      <h2>模型判断 <span class="r small" id="decmeta">–</span></h2>
+      <div id="verdict" class="verdict wait">等待文字或语音指令…</div>
+      <div class="small" style="margin-bottom:6px">执行条件（当前值与门槛）：</div>
+      <table id="reasons"><thead><tr><th>条件</th><th>当前值</th><th>门槛</th><th>说明</th></tr></thead><tbody></tbody></table>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px">
         <div>
-          <h2>intent <span class="r small" id="intentconf"></span></h2>
+          <h2>操作意图 <span class="r small" id="intentconf"></span></h2>
           <div id="intent"></div>
-          <h2 style="margin-top:12px">yes/no signals</h2>
+          <h2 style="margin-top:12px">是／否判断</h2>
           <div id="nouls"></div>
-          <h2 style="margin-top:12px">scroll amount</h2>
+          <h2 style="margin-top:12px">滚动幅度</h2>
           <div id="scroll"></div>
         </div>
         <div>
-          <h2>target element <span class="r small" id="targetconf"></span></h2>
+          <h2>目标元素 <span class="r small" id="targetconf"></span></h2>
           <div id="target"></div>
-          <h2 style="margin-top:12px">site</h2>
+          <h2 style="margin-top:12px">目标网站</h2>
           <div id="site"></div>
-          <h2 style="margin-top:12px">text to type / search (verbatim candidates)</h2>
+          <h2 style="margin-top:12px">待输入／搜索文字（原文候选）</h2>
           <div id="spans"></div>
         </div>
       </div>
@@ -141,16 +159,21 @@
   <!-- RIGHT: page -->
   <div class="col">
     <div class="card">
-      <h2>controlled page <span class="r small" id="tabs"></span></h2>
+      <h2>受控页面 <span class="r small" id="tabs"></span></h2>
       <dl class="kv">
-        <dt>url</dt><dd id="url" class="mono">–</dd>
-        <dt>title</dt><dd id="title">–</dd>
-        <dt>site</dt><dd id="site-name">–</dd>
-        <dt>search box</dt><dd id="sbox" class="mono">–</dd>
+        <dt>网址</dt><dd id="url" class="mono">–</dd>
+        <dt>标题</dt><dd id="title">–</dd>
+        <dt>网站类型</dt><dd id="site-name">–</dd>
+        <dt>搜索框</dt><dd id="sbox" class="mono">–</dd>
       </dl>
     </div>
+    <div class="card">
+      <h2>浏览器实时画面</h2>
+      <img id="preview" alt="当前受控浏览器画面" />
+      <div class="small" style="margin-top:5px">语音或文字指令会操作这个独立浏览器。</div>
+    </div>
     <div class="card grow">
-      <h2>elements sent to Jev <span class="r small" id="elcount"></span></h2>
+      <h2>发送给模型的页面元素 <span class="r small" id="elcount"></span></h2>
       <div class="grow" id="elements"></div>
     </div>
   </div>
@@ -162,30 +185,59 @@
   const fmt = (x, d = 2) => (x == null ? "–" : Number(x).toFixed(d));
   let ws;
   let ui = null;
+  let keyReady = false;
   let hotIds = new Set();
   let candIds = new Set();
+  const decisionLabels = { act: "执行", wait: "等待", ignore: "忽略", confirm: "需要确认", disambiguate: "需要选择", cancel: "已取消" };
+  const intentLabels = {
+    navigate_url: "打开网站", search_web: "网页搜索", click_element: "点击元素", type_into_field: "输入文字",
+    select_option: "选择选项", press_enter: "按回车", scroll_down: "向下滚动", scroll_up: "向上滚动",
+    go_back: "返回上一页", go_forward: "前进", reload: "刷新", open_new_tab: "打开新标签",
+    close_tab: "关闭标签", switch_tab: "切换标签", confirm: "确认", cancel: "取消", none: "无"
+  };
+  const roleLabels = { link: "链接", button: "按钮", textbox: "输入框", searchbox: "搜索框", combobox: "组合框", select: "下拉框", checkbox: "复选框", radio: "单选框", tab: "标签", clickable: "可点击项" };
+  const gateLabels = { is_command: "是否为浏览器命令", intent: "操作意图", complete: "指令是否完整", target: "目标元素", site: "目标网站", text_span: "输入文字", url_span: "网址", destructive: "是否有风险", is_correction: "是否纠正上一步", scroll_amount: "滚动幅度", exclude_target: "排除上次目标" };
+  const summaryLabels = { "open new tab": "打开新标签", "go back": "返回上一页", "not a browser command": "不是浏览器命令", "intent not confident yet": "操作意图置信度不足", "waiting for the end of the phrase (free text)": "等待文字指令结束", "no matching element on this page": "当前页面没有匹配元素", "where to? (no site or domain recognised)": "未识别要打开的网站", "search for what?": "未识别搜索内容", "type what?": "未识别要输入的文字" };
+  const translateSummary = (value) => summaryLabels[value] || value;
+  const tabCount = (n) => `${n} 个标签页`;
+  const pendingText = (summary) => `⚠ 待确认：${translateSummary(summary)}。请说或输入“确认”或“取消”（也接受 confirm / cancel）。`;
 
   // ------------------------------------------------------------ websocket
   function connect() {
-    ws = new WebSocket(`ws://${location.host}`);
-    ws.onopen = () => { $("ws").textContent = "connected"; };
-    ws.onclose = () => { $("ws").textContent = "disconnected — retrying"; setTimeout(connect, 1000); };
+    const url = new URL("ws", location.href);
+    url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(url);
+    ws.onopen = () => { $("ws").textContent = "已连接"; };
+    ws.onclose = () => { setKeyReady(false); $("ws").textContent = "连接断开，正在重试"; setTimeout(connect, 1000); };
     ws.onmessage = (ev) => {
       const { type, payload } = JSON.parse(ev.data);
       switch (type) {
         case "hello": ui = payload; renderAll(); break;
+        case "key_status":
+          setKeyReady(Boolean(payload.ready));
+          $("keystate").textContent = payload.error || (payload.ready ? "已开启。Key 仅保存在服务器的当前会话内，刷新后需重新输入。" : "请输入自己的 Key 后开始；不会写入页面或浏览器存储。 ");
+          break;
+        case "frame": $("preview").src = payload; break;
         case "transcript": renderTranscript(payload); break;
         case "decision": renderDecision(payload); break;
         case "action": ui = payload.ui; renderStats(); renderSnapshot(); break;
         case "snapshot": ui && (ui.snapshot = payload); renderSnapshot(); break;
         case "log": appendLog(payload); break;
         case "candidates": candIds = new Set((payload || []).map((c) => c.id)); renderSnapshot(); break;
-        case "pending": $("pending").textContent = payload ? `⚠ pending: ${payload.summary} — say "confirm" or "cancel"` : ""; break;
-        case "tabs": $("tabs").textContent = `${payload.length} tab${payload.length === 1 ? "" : "s"}`; break;
+        case "pending": $("pending").textContent = payload ? pendingText(payload.summary) : ""; break;
+        case "tabs": $("tabs").textContent = tabCount(payload.length); break;
       }
     };
   }
   const send = (obj) => ws && ws.readyState === 1 && ws.send(JSON.stringify(obj));
+  function setKeyReady(ready) {
+    keyReady = ready;
+    for (const id of ["micbtn", "cmd", "undo", "resnap"]) $(id).disabled = !ready;
+    $("cmdform").querySelector("button").disabled = !ready;
+    $("keybtn").disabled = ready;
+    $("apikey").disabled = ready;
+    if (!ready) { ui = null; $("preview").removeAttribute("src"); }
+  }
 
   // ------------------------------------------------------------ render
   function renderAll() {
@@ -194,7 +246,7 @@
     $("log").innerHTML = "";
     (ui.log || []).forEach(appendLog);
     if (ui.lastDecision) renderDecision(ui.lastDecision);
-    if (ui.pending) $("pending").textContent = `⚠ pending: ${ui.pending.summary} — say "confirm" or "cancel"`;
+    if (ui.pending) $("pending").textContent = pendingText(ui.pending.summary);
   }
   function renderStats() {
     const s = ui.stats;
@@ -210,12 +262,12 @@
   function renderSnapshot() {
     const sn = ui && ui.snapshot; if (!sn) return;
     $("url").textContent = sn.url; $("title").textContent = sn.title || "–"; $("site-name").textContent = sn.site;
-    $("sbox").textContent = sn.searchBoxId || "none";
+    $("sbox").textContent = sn.searchBoxId || "无";
     $("elcount").textContent = `${sn.elements.length}`;
-    if (sn.tabs) $("tabs").textContent = `${sn.tabs.length} tab${sn.tabs.length === 1 ? "" : "s"}`;
+    if (sn.tabs) $("tabs").textContent = tabCount(sn.tabs.length);
     const rows = sn.elements.map((e) => {
       const cls = hotIds.has(e.id) ? " hot" : candIds.has(e.id) ? " cand" : "";
-      return `<div class="el${cls}"><span class="id">${e.id}</span><span class="role">${e.role}${e.below_fold ? " ↓" : ""}</span><span class="txt" title="${esc(e.href || "")}">${esc(e.text || e.placeholder || "")}</span></div>`;
+      return `<div class="el${cls}"><span class="id">${e.id}</span><span class="role">${roleLabels[e.role] || e.role}${e.below_fold ? " ↓" : ""}</span><span class="txt" title="${esc(e.href || "")}">${esc(e.text || e.placeholder || "")}</span></div>`;
     });
     $("elements").innerHTML = rows.join("");
     const hot = $("elements").querySelector(".hot"); if (hot) hot.scrollIntoView({ block: "center" });
@@ -235,33 +287,33 @@
   }
   function renderDecision(d) {
     const a = d.answers, pol = d.policy;
-    $("decmeta").textContent = `${d.latencyMs} ms · ${d.questionCount} questions · ${d.usage?.input_tokens ?? "?"} tokens · $${(d.costUsd || 0).toFixed(6)} · ${d.trigger}`;
+    $("decmeta").textContent = `${d.latencyMs} ms · ${d.questionCount} 个问题 · ${d.usage?.input_tokens ?? "?"} tokens · $${(d.costUsd || 0).toFixed(6)} · ${d.trigger}`;
     const v = $("verdict"); v.className = `verdict ${pol.decision}`;
-    v.textContent = `${pol.decision.toUpperCase()} — ${pol.summary}` + (d.silentMs > 500 ? ` (silent ${d.silentMs}ms)` : "");
+    v.textContent = `${decisionLabels[pol.decision] || pol.decision} — ${translateSummary(pol.summary)}` + (d.silentMs > 500 ? `（静默 ${d.silentMs} ms）` : "");
     $("reasons").querySelector("tbody").innerHTML = (pol.reasons || []).map((r) =>
-      `<tr><td>${esc(r.name)}</td><td class="${r.pass ? "pass" : "fail"}">${esc(String(r.value))}</td><td>${esc(String(r.threshold))}</td><td class="small">${esc(r.note || "")}</td></tr>`).join("");
+      `<tr><td>${esc(gateLabels[r.name] || r.name)}</td><td class="${r.pass ? "pass" : "fail"}">${esc(String(r.value))}</td><td>${esc(String(r.threshold))}</td><td class="small">${esc(r.note || "")}</td></tr>`).join("");
 
-    $("intentconf").textContent = `confidence ${fmt(a.intent?.confidence)}`;
-    bars($("intent"), a.intent?.probabilities, a.intent?.choice);
+    $("intentconf").textContent = `置信度 ${fmt(a.intent?.confidence)}`;
+    bars($("intent"), a.intent?.probabilities, a.intent?.choice, { labels: intentLabels });
 
     const labels = {}; (ui?.snapshot?.elements || []).forEach((e) => (labels[e.id] = `${e.id} ${e.text || e.placeholder || e.role}`));
-    labels.none = "none";
-    $("targetconf").textContent = `confidence ${fmt(a.target?.confidence)}`;
+    labels.none = "无";
+    $("targetconf").textContent = `置信度 ${fmt(a.target?.confidence)}`;
     bars($("target"), a.target?.probabilities, a.target?.choice, { labels, max: 6 });
     hotIds = new Set(Object.entries(a.target?.probabilities || {}).filter(([k, p]) => k !== "none" && p >= 0.15).map(([k]) => k));
     renderSnapshot();
 
     const nouls = { is_command: a.is_command?.noul, complete: a.complete?.noul, destructive: a.destructive?.noul };
     $("nouls").innerHTML = Object.entries(nouls).map(([k, p]) =>
-      `<div class="bar"><span class="lbl">${k}</span><div class="track"><div class="fill noul" style="width:${Math.round((p || 0) * 100)}%"></div></div><span class="num">${fmt(p)}</span></div>`).join("");
+      `<div class="bar"><span class="lbl">${gateLabels[k] || k}</span><div class="track"><div class="fill noul" style="width:${Math.round((p || 0) * 100)}%"></div></div><span class="num">${fmt(p)}</span></div>`).join("");
 
-    if (a.scroll_amount) bars($("scroll"), a.scroll_amount.probabilities, String(Math.round(a.scroll_amount.score)), { labels: { 0: "a little", 1: "one page", 2: "to the end" } });
+    if (a.scroll_amount) bars($("scroll"), a.scroll_amount.probabilities, String(Math.round(a.scroll_amount.score)), { labels: { 0: "一点", 1: "一页", 2: "到底" } });
     bars($("site"), a.site?.probabilities, a.site?.choice, { max: 5 });
 
     let spans = "";
-    if (a.text_span) spans += `<div class="small">text_span</div>` + barsHtml(a.text_span.probabilities, a.text_span.choice);
-    if (a.url_span) spans += `<div class="small">url_span</div>` + barsHtml(a.url_span.probabilities, a.url_span.choice);
-    $("spans").innerHTML = spans || `<div class="small">no text/url candidates in transcript</div>`;
+    if (a.text_span) spans += `<div class="small">文字候选</div>` + barsHtml(a.text_span.probabilities, a.text_span.choice);
+    if (a.url_span) spans += `<div class="small">网址候选</div>` + barsHtml(a.url_span.probabilities, a.url_span.choice);
+    $("spans").innerHTML = spans || `<div class="small">指令中没有可识别的文字或网址候选</div>`;
   }
   function barsHtml(probs, winner) {
     const tmp = document.createElement("div"); bars(tmp, probs, winner, { max: 6 }); return tmp.innerHTML;
@@ -278,8 +330,17 @@
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   // ------------------------------------------------------------ controls
+  $("keyform").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const input = $("apikey");
+    if (!input.value.trim()) return;
+    send({ type: "set_key", key: input.value.trim() });
+    input.value = "";
+    $("keystate").textContent = "正在开启独立浏览器…";
+  });
   $("cmdform").addEventListener("submit", (ev) => {
     ev.preventDefault();
+    if (!keyReady) return;
     const text = $("cmd").value.trim(); if (!text) return;
     send({ type: "command", text });
     renderTranscript({ text, final: true, actedOn: false });
@@ -292,28 +353,46 @@
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   let rec = null, micOn = false, utteranceBase = 0;
   function startMic() {
-    if (!SR) { alert("Web Speech API not available. Use Chrome or Edge, or type commands below."); return; }
-    rec = new SR();
-    rec.continuous = true; rec.interimResults = true; rec.lang = "en-US"; rec.maxAlternatives = 1;
-    rec.onresult = (ev) => {
+    if (!keyReady) return;
+    if (!SR) { alert("当前浏览器不支持 Web Speech API。请使用 Chrome 或 Edge，或在上方输入文字指令。"); return; }
+    const recognizer = new SR();
+    rec = recognizer;
+    let currentBase = ++utteranceBase;
+    recognizer.continuous = true; recognizer.interimResults = true;
+    recognizer.lang = $("speechlang").value; recognizer.maxAlternatives = 1;
+    recognizer.onresult = (ev) => {
       // Results before ev.resultIndex are finished. Each result index is a distinct utterance.
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const r = ev.results[i];
         const text = r[0].transcript;
-        send({ type: "transcript", text, final: r.isFinal, utteranceId: `u${utteranceBase}-${i}` });
+        send({ type: "transcript", text, final: r.isFinal, utteranceId: `u${currentBase}-${i}` });
       }
     };
-    rec.onerror = (e) => { $("micstate").textContent = "error: " + e.error; if (e.error === "not-allowed") stopMic(); };
-    rec.onend = () => { if (micOn) { utteranceBase += 1; try { rec.start(); } catch {} } };
-    rec.start();
-    micOn = true; $("micdot").classList.add("on"); $("micstate").textContent = "listening"; $("micbtn").textContent = "Stop mic"; $("micbtn").classList.remove("primary");
+    recognizer.onerror = (e) => {
+      const message = e.error === "language-not-supported" ? "当前浏览器不支持所选语音语言" : `语音识别错误：${e.error}`;
+      if (["not-allowed", "service-not-allowed", "language-not-supported", "network"].includes(e.error)) stopMic();
+      $("micstate").textContent = message;
+    };
+    recognizer.onend = () => {
+      if (micOn && rec === recognizer) {
+        currentBase = ++utteranceBase;
+        try { recognizer.start(); } catch { stopMic(); }
+      }
+    };
+    try { recognizer.start(); } catch (e) { rec = null; $("micstate").textContent = `无法开启：${e.message || e}`; return; }
+    micOn = true; $("micdot").classList.add("on");
+    $("micstate").textContent = $("speechlang").value === "zh-CN" ? "正在收听中文" : "正在收听英文";
+    $("micbtn").textContent = "关闭麦克风"; $("micbtn").classList.remove("primary");
+    $("speechlang").disabled = true;
   }
   function stopMic() {
     micOn = false; try { rec && rec.stop(); } catch {}
-    $("micdot").classList.remove("on"); $("micstate").textContent = "off"; $("micbtn").textContent = "Start mic"; $("micbtn").classList.add("primary");
+    $("micdot").classList.remove("on"); $("micstate").textContent = "已关闭"; $("micbtn").textContent = "开启麦克风"; $("micbtn").classList.add("primary");
+    $("speechlang").disabled = false;
   }
   $("micbtn").onclick = () => (micOn ? stopMic() : startMic());
 
+  setKeyReady(false);
   connect();
 })();
 </script>

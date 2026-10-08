@@ -149,8 +149,10 @@ export async function execute(action, browser) {
     }
 
     case "close_tab": {
+      // In a persistent Chromium context, closing the final page can exit the
+      // entire browser. Open its replacement first so the controller stays usable.
+      if (browser.pages.length === 1) await browser.context.newPage();
       await page.close();
-      if (browser.pages.length === 0) await browser.context.newPage();
       await browser.setActive(browser.page);
       return { ok: true, detail: `tabs=${browser.pages.length}` };
     }

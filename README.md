@@ -1,178 +1,106 @@
-# voice-browser — talk to a real browser, it acts before you finish the sentence
+# Jev 中文语音浏览器
 
-A Node app that controls a **headed Chromium window** (Playwright) by voice. Speech is streamed
-word by word from the browser's Web Speech API to a small Node server; on every partial transcript
-the server asks **Jev** (TypeSafe's System One model, `jev-1.13.0`) one request with a dozen typed
-questions — intent, target element, site, "is the command complete?", "is this even addressed to
-me?", "is it destructive?" — gets typed probabilities back in ~250–350 ms, and code decides whether
-to act, wait, ask, or ignore.
+**说中文或输入中文，让 AI 操作浏览器。** 页面会显示 Jev 的判断、耗时和实际操作的浏览器画面。
 
-Jev never generates text. Search queries, typed text and URLs are extracted as candidate spans by
-code and Jev only *picks* one, which is copied verbatim.
+<!-- GitHub 视频附件：发布后替换下面一行，完整 41 秒、只压缩不剪辑。 -->
+VIDEO_URL_PLACEHOLDER
 
-```
- mic (Chrome, Web Speech API)          Node server (owns the API key)             controlled window
- ───────────────────────────    ws     ───────────────────────────────────         ──────────────────
- partial transcripts  ───────────────▶ debounce 200 ms                            headed Chromium via
- "go to"  "go to wiki"                 snapshot page (≤100 elements, e01..eNN) ◀── Playwright, persistent
- "go to wikipedia" (final)             ONE Jev request: 9–11 questions             profile, overlay
-                                       policy (thresholds in constants.js)  ───▶  highlight / toast /
- control page ◀─────────────────────── decision + bars + latency + cost            numbered candidates
-```
+[点击播放完整未剪辑演示](docs/demo-uncut.mp4) · [下载视频原片的轻压缩版](docs/demo-uncut.mp4)
 
-## Run it
+> 本项目基于 [moritzkremb/jev-voice-browser](https://github.com/moritzkremb/jev-voice-browser) 二次开发，沿用原项目的 MIT 许可。主要改动是中文界面、中文语音识别与中文文字指令、浏览器画面预览，以及每位使用者自行输入 Jev API Key 的独立会话。Jev 的决策与页面操作仍分别由 TypeSafe SDK 和 Playwright 完成。
 
-Requirements: Node ≥ 20 (tested on 22), npm, Chrome or Edge for the microphone (the Web Speech API
-is not available in Firefox/Safari). Real API calls cost ~$0.0002 each.
+## 在线体验
 
-```bash
-git clone https://github.com/moritzkremb/jev-voice-browser.git
-cd jev-voice-browser
-npm install
+[打开 Jev 中文语音浏览器](https://lcgf.xyz/jev-voice-cn/)
+
+1. 在 [TypeSafe 控制台](https://console.typesafe.ai/keys) 获取自己的 Jev API Key，在页面输入。Key 通过当前页面的 WebSocket 连接交给服务端，只用于这个连接的 Jev 调用；刷新或断开后需要重新输入。请只在你信任的部署实例上输入 Key。
+2. 在 Chrome 或 Edge 中点击「开启麦克风」，允许权限后说中文；也可以直接在输入框写中文指令并回车。
+3. 右侧可以看到受控浏览器的画面。遇到有风险的操作，页面会要求确认。
+
+例如：「打开维基百科」「搜索北京天气」「点击第一个结果」「向下滚动一页」「返回上一页」。语音识别默认选 `zh-CN`，也能切换英语。
+
+## 如何运行
+
+需要 Node.js 20+、npm 和 Playwright Chromium。官方 Jev API Key 由使用者在网页填写，**无需在 `.env`、命令行或源码里放 Key**。
+
+### Windows
+
+```powershell
+git clone https://github.com/BHD110/jev-voice-browser-zh.git
+cd jev-voice-browser-zh
+npm ci
 npx playwright install chromium
-cp .env.example .env          # paste your TypeSafe API key (https://console.typesafe.ai/keys)
-./run.sh                      # starts the server on http://localhost:8787
+.\start-windows.ps1
 ```
 
-Then open **http://localhost:8787 in your normal Chrome**, click **Start mic**, allow the
-microphone, and speak. A separate Chromium window (the *controlled* browser) is opened by the server;
-that is the one that acts. Keep the control page visible on a second screen / half the screen for
-the live probability bars.
+然后打开 `http://127.0.0.1:8789/`。也可双击 `start-voice-browser.cmd`。默认端口 8789 是为了保留原版项目的 8787；需要换端口时使用 `node src/server.js --port 9000`。
 
-Options: `./run.sh --port 9000`, `--host 0.0.0.0` (LAN, see Security), `--start-url https://…`, `--headless` (CI), or attach to a Chrome
-you already have running instead of launching one:
+### Linux / macOS
 
 ```bash
-# start your Chrome with a debugging port, then:
-./run.sh --cdp http://127.0.0.1:9222
+git clone https://github.com/BHD110/jev-voice-browser-zh.git
+cd jev-voice-browser-zh
+npm ci
+npx playwright install chromium
+node src/server.js --headless --port 8789
 ```
 
-Set the key yourself instead of `.env`: `export TYPESAFE_API_KEY=…` (legacy `JEV_API_KEY` is
-also accepted) and `npm start`. The key is only ever read by the Node process; the control page
-never sees it.
+访问 `http://127.0.0.1:8789/`。Linux 缺少浏览器系统库时，按 Playwright 提示安装依赖。服务器部署应通过 HTTPS 反向代理访问，以便浏览器申请麦克风权限和使用加密的 WebSocket。
 
-**Security:** the server listens on `127.0.0.1` only. Anyone who can reach the control port can
-drive the browser and spend your API credits, so only use `--host 0.0.0.0` on a network you trust.
-The controlled Chromium uses a persistent profile in `.browser-profile/` (gitignored) — don't log
-into accounts there that you wouldn't want a mis-heard "click place order" to touch; destructive
-clicks require a spoken "confirm", but treat that as a convenience, not a guarantee.
+### 服务器部署
 
-No microphone? Type a command into the text box on the control page and press Enter.
-
-## What you can say
-
-| Say | What happens |
-| --- | --- |
-| "go to wikipedia" / "open youtube" / "go to example dot com" | navigates (site list or spoken domain, code owns the URLs) |
-| "search for alan turing" | uses the page's own search box if it has one (Wikipedia, YouTube…), else DuckDuckGo |
-| "search youtube for lofi beats" | site-specific search URL template |
-| "click the first result" / "click the new link" / "open the comments tab" | clicks the element Jev picked from the snapshot; ambiguous → numbered overlays, say "two" |
-| "type hello world into the search box" | types verbatim (Jev picked the span, code copies it) |
-| "scroll down a bit" / "scroll to the bottom" / "scroll up a page" | scroll with amount from a 3-level Score |
-| "go back" / "go forward" / "reload" | history |
-| "open a new tab" / "close this tab" / "next tab" | tabs |
-| "click place order" | destructive → toast asks you to say **"confirm"** (or "cancel") |
-| "so anyway I think we should get lunch" | ignored (`is_command` ≈ 0.02) |
-
-Two commands in one breath work too: "go to example dot com and click the more information link".
-
-## How a decision is made
-
-Every transcript update produces exactly one Jev request (`src/jev.js`). State:
-
-```json
-{ "transcript": "open the documentation",
-  "page": { "url": "https://typesafe.ai/jev", "title": "Jev", "site": "generic" },
-  "elements": ["e03 link \"Documentation\" → docs.typesafe.ai", "e07 link \"Read the docs\" → docs.typesafe.ai", "..."],
-  "context": {
-    "previous_page": { "url": "https://duckduckgo.com/?q=jev+typesafe", "title": "jev typesafe at DuckDuckGo" },
-    "recent_actions": [
-      { "said": "click the first result", "action": "click_element", "target": "link \"TypeSafe — Jev\"", "outcome": "navigated to typesafe.ai/jev", "seconds_ago": 6 },
-      { "said": "search for jev typesafe", "action": "navigate_url", "outcome": "navigated to duckduckgo.com/?q=jev+typesafe", "seconds_ago": 25 } ] } }
-```
-
-`context` is the conversation so far: the page you came from and the last three executed actions
-(what you said, what was done, what happened). It is what makes "go back to the results", "no, not
-that one", "the other one" and "open its documentation" resolvable — Jev has no memory between
-requests, so the memory lives in the state.
-
-Questions (all in `src/constants.js`, asked together, answered in parallel):
-
-| id | type | answers |
-| --- | --- | --- |
-| `intent` | Choice | navigate_url · search_web · click_element · type_into_field · select_option · press_enter · scroll_down/up · go_back/forward · reload · open/close/switch tab · confirm · cancel · none — each option has `{what, not_for, examples}` |
-| `target` | Choice | the element ids on the page + `none` |
-| `site` | Choice | google · duckduckgo · the_web · youtube · wikipedia · github · amazon · reddit · twitter_x · hacker_news · example_com · other_named_site · none |
-| `complete` | Noul | has the user finished the command? (lets us act on partial speech) |
-| `is_command` | Noul | is the user addressing the browser at all? |
-| `destructive` | Noul | would it submit / buy / delete / send? |
-| `scroll_amount` | Score | a little · one page · to the end |
-| `text_span` | Choice | verbatim candidate spans extracted by regex (+ `none`) — only when the transcript has any |
-| `url_span` | Choice | domain-looking spans (+ `none`) — only when present |
-| `tab_direction` | Choice | next · previous · first · none |
-| `is_correction` | Noul | is the user rejecting / redirecting the most recent action in `context.recent_actions`? — only asked when there is history |
-
-Policy (`src/policy.js`, thresholds `T` in `constants.js`), shown live in the UI as a gate table:
-
-0. `is_correction ≥ 0.6` on a finished phrase: with no confident new command ("no, not that one",
-   "undo that") → reverse the last action (click/navigate → back, typing → clear, scroll → opposite);
-   with a new target ("no, the other one") → the previously clicked element is excluded from the
-   candidates. A confident closed-set command ("go back" after a scroll) is never treated as a correction.
-1. `is_command ≥ 0.5` else **ignore**
-2. `intent.confidence ≥ 0.55` and not `none` else **wait**
-3. `complete ≥ 0.6`, or 900 ms of silence, or the recognizer's final result — else **wait**
-4. free-text intents (search / type) additionally wait for the final result or 600 ms silence, so a
-   query is never truncated ("search for alan" vs "search for alan turing")
-5. build the action in code: URL templates, search-box fallback, verbatim span copy
-6. click/type targets need `target.confidence ≥ 0.45` and top probability ≥ 0.35, else the top 2–3
-   candidates get numbered overlays in the page and a spoken number picks one (no model call)
-7. `destructive ≥ 0.5` on a click → **confirm** (say "confirm" / "cancel")
-
-Requests overlap: up to 2 in flight; older ones are cancelled with `AbortSignal`. A response for a
-partial transcript may still act if the words already commit to a closed-set action ("go back"),
-but is never treated as final for free text.
-
-## Project layout
-
-```
-src/constants.js   MODEL pin, thresholds, every question text — the one file to review on camera
-src/jev.js         builds state + questions, calls @typesafe-ai/sdk, returns answers/latency/usage/cost
-src/spans.js       candidate extraction (text payloads, spoken URLs, number words) — code, not Jev
-src/snapshot.js    in-page element collector (tags data-vb-id), compaction + size guard, site detection
-src/policy.js      answers → act / wait / ignore / confirm / disambiguate, with reasons
-src/executor.js    Playwright actions + overlay feedback
-src/browser.js     launch headed Chromium (persistent profile) or attach via CDP; tabs
-src/overlay.js     injected highlight / toast / numbered badges
-src/controller.js  debounce, in-flight management, one action per utterance, chaining, stats
-src/server.js      Express + ws, serves src/public/index.html (control page)
-scripts/demo.js    word-by-word replay against real sites = end-to-end test
-test/unit/         spans, snapshot compaction, policy (mocked Jev), controller (mocked Jev + browser), context encoding + corrections
-test/integration/  34 real-API cases on captured page fixtures (incl. context / correction), prints pass rate + latency
-```
-
-## Tests and demo
+服务端以独立浏览器会话运行，访问者的页面和 Key 不混用。示例运行命令：
 
 ```bash
-npm test                 # unit tests (no network)
-npm run test:integration # real Jev calls on fixtures; prints pass rate (expects ≥ 90%)
-npm run demo             # headed replay of 16 spoken commands against real sites, asserts URLs
-npm run demo:ci          # same, headless; exit code 1 on failure
-node scripts/demo.js --headless --only 1,2,3 --word-ms 250
+npm ci --omit=dev
+npx playwright install chromium
+node src/server.js --headless --host 127.0.0.1 --port 5024
 ```
 
-Latest measured (Sep 2026, from this machine): integration 34/34 (100%, incl. 7 context/correction cases), Jev latency avg ≈ 330 ms
-(p50 ≈ 300 ms, 3–6k input tokens per request; the first request of a process is ~700 ms for the
-TLS handshake), last-word→decision ≈ 300 ms including the 200 ms debounce, whole demo ≈ $0.01.
+将 `/jev-voice-cn/` 反向代理到 `http://127.0.0.1:5024/`，并转发 WebSocket 的 `Upgrade`、`Connection` 请求头。服务端不配置共享的 `TYPESAFE_API_KEY`。默认最多三个同时使用的浏览器会话，闲置 30 分钟会释放。公网会话阻止浏览器访问本机和内网地址。
 
-## Notes and limitations
+可选环境变量见 [.env.example](.env.example)。不要将自己的 Key 写进公开仓库。当前服务端部署的应用源码与 WebP 图片包小于 2 MB；仓库另存放完整时长的演示视频，视频不参与服务端部署。
 
-- Web Speech API only in Chrome/Edge; it sends audio to Google. Interim results arrive in bursts, so
-  "acting before you finish" is most visible on longer sentences.
-- One action per utterance; extra words after an executed command are treated as a new command
-  only if there are at least two of them.
-- Element snapshot is capped at 100 items (viewport first) and 60 chars of text each — deep pages
-  need a scroll before "click …" finds below-fold items. Elements inside iframes are not seen.
-- Sites with heavy bot protection (Google consent, some search engines in headless mode) may not
-  render results; the demo uses Wikipedia, example.com, Hacker News and DuckDuckGo.
-- `select_option` matches the option label in code by substring; `switch_tab` cycles.
-- Confidence gates are calibrated on `jev-1.13.0`; re-check `T` if you move the model alias.
+## 它如何工作
+
+```text
+中文语音（浏览器 Web Speech API）或中文文字
+                    ↓
+             当前页面元素快照
+                    ↓
+       Jev 一次并行回答多个决策问题
+       意图、目标元素、是否完整、是否危险等
+                    ↓
+          置信度门槛和确认规则
+                    ↓
+       Playwright 操作独立 Chromium
+                    ↓
+         浏览器画面和决策结果回传
+```
+
+Jev 负责判断要做什么、选哪个页面元素；操作规则负责等待、澄清和危险操作确认；Playwright 执行点击、输入、滚动和导航。语音的中间识别结果也会送去判断，因此某些明确指令可以在说完前开始执行。**演示中的约 300 ms 是一次 Jev 决策的示例耗时，不是每次操作的保证值**；网络、语音识别、页面加载都会影响整体速度。
+
+<details>
+<summary>jev商业定制、技术场景交流欢迎联系，请注明来意</summary>
+
+<p align="center"><img src="docs/wechat-qr.webp" alt="微信联系二维码" width="240"></p>
+
+</details>
+
+## 开发与验证
+
+```bash
+npm test
+```
+
+单元测试不调用 Jev API。真实 Jev 的效果依赖你的 Key、网页状态和网络环境。Chrome/Edge 的语音识别由浏览器提供，识别服务可能会处理音频；不想使用麦克风时可直接输入中文文字。
+
+## 许可与来源
+
+原项目：[moritzkremb/jev-voice-browser](https://github.com/moritzkremb/jev-voice-browser)。本仓库保留 [MIT License](LICENSE)，感谢原作者的 Jev 浏览器控制实现。
+
+---
+
+**jev商业定制、技术场景交流欢迎联系，请注明来意**
+
+<img src="docs/wechat-qr.webp" alt="微信联系二维码" width="130">

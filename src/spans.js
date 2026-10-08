@@ -37,7 +37,7 @@ export function cleanTranscript(text) {
 }
 
 function stripFiller(s) {
-  return s.replace(FILLER_RE, " ").replace(/\s+/g, " ").replace(/[.,!?]+$/g, "").trim();
+  return s.replace(FILLER_RE, " ").replace(/\s+/g, " ").replace(/[.,!?，。！？；：]+$/g, "").trim();
 }
 
 function pushUnique(list, value) {
@@ -59,6 +59,21 @@ export function extractTextCandidates(transcript) {
 
   // 1. quoted spans
   for (const m of t.matchAll(/["“”']([^"“”']{1,120})["“”']/g)) pushUnique(out, m[1]);
+
+  // Chinese commands have no word boundaries or spaces. Keep the text after the
+  // command verb as a verbatim option, so Jev can select it without generating it.
+  if (/\p{Script=Han}/u.test(t)) {
+    const typed = /(?:输入|键入|填写|填入|写入)(?:一下)?\s*[:：]?\s*(.{1,120})$/u.exec(t);
+    if (typed) {
+      const payload = typed[1].replace(/(?:到|进|在)(?:[^，。！？]{0,12})(?:搜索框|输入框|文本框|评论框|地址栏|输入栏)(?:里|中|内)?$/u, "");
+      pushUnique(out, payload);
+      const beforeVerb = /把(.{1,120}?)(?:输入|键入|填写|填入|写入)(?:到|进|在)/u.exec(t);
+      if (beforeVerb) pushUnique(out, beforeVerb[1]);
+    } else {
+      const searched = /(?:搜索|搜一下|查找|查询|查一下|搜一搜|搜)(?:一下)?(?:关于|有关)?\s*[:：]?\s*(.{1,120})$/u.exec(t);
+      if (searched) pushUnique(out, searched[1]);
+    }
+  }
 
   // 2. text after a payload verb (earliest verb in the sentence first), destination phrase stripped
   const verbMatches = TEXT_VERBS.map((re) => re.exec(t))
@@ -125,6 +140,7 @@ const NUMBER_WORDS = {
 };
 // Speech-recognizer homophones, only trusted when they are the whole utterance ("to" alone).
 const NUMBER_HOMOPHONES = { won: 1, to: 2, too: 2, for: 4 };
+const CHINESE_NUMBERS = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5 };
 
 /**
  * When numbered candidate overlays are on screen, a bare number ("two", "the second one",
@@ -138,6 +154,11 @@ const PICK_STOPWORDS = new Set([
 export function parseCandidatePick(transcript, max = 5) {
   const t = cleanTranscript(transcript).toLowerCase().replace(/[.,!?]/g, "");
   if (!t) return null;
+  const chinese = /^(?:(?:请)?(?:选|点|点击|打开))?第?([一二两三四五1-5])(?:个|项|条|链接|结果)?(?:吧|就行)?$/u.exec(t.replace(/\s+/g, ""));
+  if (chinese) {
+    const n = CHINESE_NUMBERS[chinese[1]] ?? Number(chinese[1]);
+    if (n <= max) return n;
+  }
   const meaningful = t.split(" ").filter((w) => !PICK_STOPWORDS.has(w));
   if (meaningful.length === 0 || meaningful.length > 2) return null;
   for (const w of meaningful) {

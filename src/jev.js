@@ -19,11 +19,31 @@ export function getClient() {
   _client = new TypeSafeClient({
     apiKey,
     defaultModel: MODEL,
-    timeout: 8000,
+    timeout: Number(process.env.TYPESAFE_TIMEOUT_MS) || 8000,
     retry: { maxRetries: 1, backoffInitialMs: 150, backoffMaxMs: 600 },
     logLevel: "off",
   });
   return _client;
+}
+
+/** One client per browser session. The key never becomes part of UI state or a response. */
+export function createDecider(apiKey) {
+  if (typeof apiKey !== "string" || !apiKey.trim()) throw new Error("请先输入自己的 Jev API Key");
+  const client = new TypeSafeClient({
+    apiKey: apiKey.trim(),
+    defaultModel: MODEL,
+    timeout: Number(process.env.TYPESAFE_TIMEOUT_MS) || 8000,
+    retry: { maxRetries: 1, backoffInitialMs: 150, backoffMaxMs: 600 },
+    logLevel: "off",
+  });
+  return async (input, options = {}) => {
+    try {
+      return await decide(input, { ...options, client });
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+      throw new Error(String(err?.message || err).replaceAll(apiKey, "[redacted]"));
+    }
+  };
 }
 
 export function hasApiKey() {
@@ -31,6 +51,10 @@ export function hasApiKey() {
 }
 
 export function costUsd(usage) {
+  try {
+    const host = new URL(process.env.TYPESAFE_BASE_URL || "https://api.typesafe.ai").hostname;
+    if (["127.0.0.1", "localhost", "::1"].includes(host)) return 0;
+  } catch {}
   const tokens = usage?.input_tokens ?? 0;
   return (tokens / 1_000_000) * PRICE_PER_M_INPUT_TOKENS_USD;
 }
@@ -149,8 +173,7 @@ export function buildRequest({ transcript, snapshot, pendingConfirmation = null,
  * Ask Jev. Resolves to { answers, latencyMs, usage, costUsd, model, requestId, candidates, state }
  * or rejects with APIUserAbortError when `signal` aborts (newer transcript arrived).
  */
-export async function decide(input, { signal } = {}) {
-  const client = getClient();
+export async function decide(input, { signal, client = getClient() } = {}) {
   const { state, questions, candidates } = buildRequest(input);
   const t0 = performance.now();
   const { data, requestId } = await client

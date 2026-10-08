@@ -1,5 +1,5 @@
 /**
- * Orchestrator: transcript updates -> (debounce, cancel stale) -> one Jev request ->
+ * Orchestrator: transcript updates -> (debounce, bound pending requests) -> one Jev request ->
  * policy -> Playwright action -> fresh snapshot. Emits events for the UI / demo / tests.
  */
 import { EventEmitter } from "node:events";
@@ -31,7 +31,9 @@ export class Controller extends EventEmitter {
     this.lastDecision = null;
     this.debounceTimer = null;
     this.silenceTimer = null;
-    this.inflight = []; // [{ac, text, at}] requests currently awaiting Jev
+    this.inflight = []; // [{utterance, text, final, at}] requests currently awaiting Jev
+    this.pendingLatest = false;
+    this.closed = false;
     this.busy = false;
     this.log = [];
     this.stats = { calls: 0, inputTokens: 0, costUsd: 0, latencies: [], actions: 0, model: MODEL, commandToActionMs: [], decisionMs: [] };
@@ -140,8 +142,9 @@ export class Controller extends EventEmitter {
     };
   }
 
-  /** Ask Jev about the current utterance. Cancels any in-flight request. */
+  /** Ask Jev about the current utterance, keeping requests within the concurrency limit. */
   async decideNow(trigger = "manual") {
+    if (this.closed) return;
     const utt = this.utterance;
     if (!utt || !utt.text || utt.actedOn) return;
     if (this.busy) {
@@ -149,22 +152,32 @@ export class Controller extends EventEmitter {
       this.silenceTimer = setTimeout(() => this.decideNow("after-action"), 150);
       return;
     }
-    // Allow up to MAX_INFLIGHT overlapping requests (a request for the previous partial may
-    // still be useful — if the words already commit to an action we act on it). Anything older
-    // is stale and gets cancelled via AbortSignal.
-    while (this.inflight.length >= MAX_INFLIGHT) {
-      const old = this.inflight.shift();
-      old.ac.abort();
+    // Keep at most MAX_INFLIGHT live SDK requests. Aborting a response body can
+    // leave an unhandled AbortError in Node, so queue the latest transcript and
+    // ignore stale answers when they arrive instead of cancelling the fetch.
+    if (this.inflight.some((r) => r.utterance === utt && r.text === utt.text && r.final === utt.final)) return;
+    if (this.inflight.length >= MAX_INFLIGHT) {
+      this.pendingLatest = true;
+      return;
     }
-    const ac = new AbortController();
-    const req = { ac, text: utt.text, at: Date.now() };
+    const req = { utterance: utt, text: utt.text, final: utt.final, at: Date.now() };
     this.inflight.push(req);
-
-    if (Date.now() - this.snapshotAt > 1500) await this.refreshSnapshot();
+    const finishRequest = () => {
+      this.inflight = this.inflight.filter((r) => r !== req);
+      if (this.pendingLatest && !this.closed) {
+        this.pendingLatest = false;
+        queueMicrotask(() => this.decideNow("latest").catch((err) => this.emit("error", err)));
+      }
+    };
 
     const textAtRequest = utt.text;
     let result;
     try {
+      if (
+        this.browser.context?.isClosed?.() ||
+        (Array.isArray(this.browser.pages) && this.browser.pages.length === 0) ||
+        Date.now() - this.snapshotAt > 1500
+      ) await this.refreshSnapshot();
       result = await this._decide(
         {
           transcript: textAtRequest,
@@ -173,20 +186,19 @@ export class Controller extends EventEmitter {
           tabs: this.browser.tabInfo(),
           context: this.context,
         },
-        { signal: ac.signal },
+        {},
       );
     } catch (err) {
-      this.inflight = this.inflight.filter((r) => r !== req);
-      if (isAbortError(err) || ac.signal.aborted) {
-        this._log("debug", `cancelled stale request for "${textAtRequest}"`);
+      finishRequest();
+      if (this.closed || isAbortError(err)) {
         return;
       }
       this._log("error", `Jev error: ${err.message || err}`);
       this.emit("error", err);
       return;
     }
-    this.inflight = this.inflight.filter((r) => r !== req);
-    if (ac.signal.aborted || this.utterance !== utt || utt.actedOn) return;
+    finishRequest();
+    if (this.closed || this.utterance !== utt || utt.actedOn) return;
 
     this.stats.calls += 1;
     this.stats.inputTokens += result.usage?.input_tokens ?? 0;
@@ -383,9 +395,10 @@ export class Controller extends EventEmitter {
   }
 
   async close() {
+    this.closed = true;
     clearTimeout(this.debounceTimer);
     clearTimeout(this.silenceTimer);
-    for (const r of this.inflight) r.ac.abort();
+    this.pendingLatest = false;
     this.inflight = [];
   }
 }

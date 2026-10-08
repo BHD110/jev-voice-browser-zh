@@ -133,8 +133,8 @@ test("waits on an incomplete partial, then acts when the recognizer marks it fin
   await c.close();
 });
 
-test("cancels stale in-flight requests beyond MAX_INFLIGHT", async () => {
-  const { c, executed, decideFn } = setup({ latency: 400 });
+test("bounds in-flight requests and runs the latest transcript when a slot opens", async () => {
+  const { c, executed, decideFn } = setup({ latency: 600 });
   await c.start();
   c.handleTranscript({ text: "go", final: false, utteranceId: "u3" });
   await sleep(DEBOUNCE_MS + 20);
@@ -142,8 +142,9 @@ test("cancels stale in-flight requests beyond MAX_INFLIGHT", async () => {
   await sleep(DEBOUNCE_MS + 20);
   c.handleTranscript({ text: "go back", final: false, utteranceId: "u3" });
   await sleep(DEBOUNCE_MS + 20);
-  assert.equal(c.inflight.length, 2, "oldest request aborted, two in flight");
-  await sleep(600);
+  assert.equal(c.inflight.length, 2, "no more than two requests are in flight");
+  assert.equal(c.pendingLatest, true, "the newest transcript waits for a slot");
+  await sleep(1000);
   assert.equal(executed.length, 1);
   assert.equal(decideFn.calls.length, 3);
   await c.close();
